@@ -1,13 +1,16 @@
 module direntry;
 
+import std.algorithm        : canFind;
+import std.algorithm        : sort;
+import std.array            : array;
 import std.datetime.systime : Clock, SysTime, unixTimeToStdTime;
 import std.internal.cstring;
 import std.meta;
 import std.range.primitives;
+import std.stdio            : writeln;
 import std.traits;
 import std.typecons;
-import std.algorithm : canFind;
-import std.stdio : writeln;
+import path                 : Path;
 
 
 version ( Windows )
@@ -23,7 +26,7 @@ version ( Windows )
 version ( Windows ) 
 {
     private 
-    ulong makeUlong( DWORD dwLow, DWORD dwHigh ) @safe pure nothrow @nogc
+    ulong makeUlong( DWORD dwLow, DWORD dwHigh )
     {
         ULARGE_INTEGER li;
         li.LowPart  = dwLow;
@@ -50,23 +53,48 @@ class FileException : Exception
 
 struct DirEntry
 {
-@safe:
 public:
     string name;
     alias name this;
 
     WIN32_FIND_DATAW _fd;
 
-
-    this( string pathname ) @trusted
+    enum Sorting
     {
-        name = pathname;
+        BY_DIR,
+        BY_NAME
+    };
+
+
+    this( string pathname )
+    {
+        name = Path( pathname );
         readAttributes();
     }
 
 
+    Path path()
+    {
+        return cast( Path ) name;
+    }
+
+
     /** */
-    void readAttributes() @trusted
+    string dirName()
+    {
+        return path.parent;
+    }
+
+
+    /** */
+    string baseName()
+    {
+        return path.back;
+    }
+
+
+    /** */
+    void readAttributes()
     {
         if ( isRootPath( name ) )
         {
@@ -98,21 +126,19 @@ public:
     /** */
     alias Tuple!( bool, "hasParent", DirEntry, "parent" ) ParentResult;
 
+
     /** */
     ParentResult parent()
     {
-        import std.path : dirName;
-
-        auto parentPath = name.dirName;
-
         //
         ParentResult result;
 
-        if ( parentPath && ( parentPath != name ) )
+        auto par = path.parent;
+
+        if ( par.length != 0 )
         {
-            result.hasParent   = true;
-            result.parent.name = parentPath;
-            result.parent.readAttributes();
+            result.hasParent = true;
+            result.parent    = DirEntry( par );
         }
 
         return result;
@@ -120,13 +146,31 @@ public:
 
 
     /** */
-    auto childs() @trusted
+    auto childs()
     {
         return DirIterator( name );
     }
 
 
-    void updateName( string path ) @trusted
+    /** childs( [ Sorting.BY_DIR, Sorting.BY_NAME ] ) */
+    auto childs( Sorting[] sorting )
+    {
+        //bool delegate( DirEntry a, DirEntry b ) sortFunc;
+
+        return
+            childs
+            .array
+            .sort!( 
+                ( a, b ) => ( 
+                    ( a.isDir && b.isFile ) ||
+                    ( a.isDir && b.isDir && a.name < b.name ) ||
+                    ( a.isFile && b.isFile && a.name < b.name )
+                ) 
+            );
+    }
+
+
+    void updateName( string path )
     {
         import core.stdc.wchar_ : wcslen;
         import std.path         : buildPath;
@@ -138,13 +182,13 @@ public:
 
 
     @property 
-    bool isDir() const pure nothrow
+    bool isDir() const
     {
         return ( _fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) != 0;
     }
 
     @property 
-    bool isFile() const pure nothrow
+    bool isFile() const
     {
         //Are there no options in Windows other than directory and file?
         //If there are, then this probably isn't the best way to determine
@@ -153,43 +197,43 @@ public:
     }
 
     @property 
-    bool isSymlink() const pure nothrow
+    bool isSymlink() const
     {
         return ( _fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT ) != 0;
     }
 
     @property 
-    ulong size() const pure nothrow
+    ulong size() const
     {
         return makeUlong( _fd.nFileSizeLow, _fd.nFileSizeHigh );
     }
 
     @property 
-    SysTime timeCreated() const nothrow
+    SysTime timeCreated() const
     {
-        return trustedFILETIMEToSysTime( &_fd.ftCreationTime );
+        return FILETIMEToSysTime( &_fd.ftCreationTime );
     }
 
     @property 
-    SysTime timeLastAccessed() const nothrow
+    SysTime timeLastAccessed() const
     {
-        return trustedFILETIMEToSysTime( &_fd.ftLastAccessTime );
+        return FILETIMEToSysTime( &_fd.ftLastAccessTime );
     }
 
     @property 
-    SysTime timeLastModified() const nothrow
+    SysTime timeLastModified() const
     {
-        return trustedFILETIMEToSysTime( &_fd.ftLastWriteTime );
+        return FILETIMEToSysTime( &_fd.ftLastWriteTime );
     }
 
     @property 
-    uint attributes() const pure nothrow
+    uint attributes() const
     {
         return _fd.dwFileAttributes;
     }
 
     @property 
-    uint linkAttributes() const pure nothrow
+    uint linkAttributes() const
     {
         return _fd.dwFileAttributes;
     }
@@ -261,13 +305,13 @@ version ( Windows)
 }
 
 
-SysTime trustedFILETIMEToSysTime( const( FILETIME )* ft ) nothrow @trusted 
-{
-    import std.datetime.systime : FILETIMEToSysTime;
+//SysTime trustedFILETIMEToSysTime( const( FILETIME )* ft ) nothrow @trusted 
+//{
+//    import std.datetime.systime : FILETIMEToSysTime;
 
-    try { return cast( SysTime ) FILETIMEToSysTime( ft ); }
-    catch ( Exception e ) { return SysTime(); }
-}
+//    try { return cast( SysTime ) FILETIMEToSysTime( ft ); }
+//    catch ( Exception e ) { return SysTime(); }
+//}
 
 
 
@@ -294,13 +338,12 @@ version ( Windows )
 {
     private struct DirIteratorImpl
     {
-      @safe:
         string   _path;
         DirEntry _cur;
         HANDLE   _handle = NULL;
 
         
-        bool toNext( bool fetch ) @trusted
+        bool toNext( bool fetch )
         {
             import core.stdc.wchar_ : wcscmp;
 
@@ -343,12 +386,12 @@ version ( Windows )
 
             auto searchPattern = chainPath( pathnameStr, "*.*" );
 
-            static auto trustedFindFirstFileW( typeof( searchPattern ) pattern, WIN32_FIND_DATAW* fd ) @trusted
-            {
-                return FindFirstFileW( pattern.tempCString!FSChar(), fd );
-            }
+            //static auto trustedFindFirstFileW( typeof( searchPattern ) pattern, WIN32_FIND_DATAW* fd ) @trusted
+            //{
+            //    return FindFirstFileW( pattern.tempCString!FSChar(), fd );
+            //}
 
-            _handle = trustedFindFirstFileW( searchPattern, &_cur._fd );
+            _handle = FindFirstFileW( searchPattern.tempCString!FSChar(), &_cur._fd );
 
             if ( _handle == INVALID_HANDLE_VALUE )
             {
@@ -388,7 +431,7 @@ version ( Windows )
         }
 
 
-        ~this() @trusted
+        ~this()
         {
             if ( _handle != NULL )
             {
@@ -401,9 +444,8 @@ version ( Windows )
 
 struct DirIterator
 {
-@safe:
     RefCounted!( DirIteratorImpl, RefCountedAutoInitialize.no ) impl;
-    this( string pathname ) @trusted
+    this( string pathname )
     {
         impl = typeof( impl )( pathname );
     }
