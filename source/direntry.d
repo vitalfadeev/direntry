@@ -61,8 +61,8 @@ public:
 
     enum Sorting
     {
-        BY_DIR,
-        BY_NAME
+        DIR,
+        NAME
     };
 
 
@@ -73,6 +73,14 @@ public:
     }
 
 
+    this( Path pathname )
+    {
+        name = pathname;
+        readAttributes();
+    }
+
+
+    /** */
     Path path()
     {
         return cast( Path ) name;
@@ -90,6 +98,13 @@ public:
     string baseName()
     {
         return path.back;
+    }
+
+
+    /** */
+    string shortName()
+    {
+        return baseName;
     }
 
 
