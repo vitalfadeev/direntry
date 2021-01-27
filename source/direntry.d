@@ -109,6 +109,22 @@ public:
 
 
     /** */
+    string asString()
+    {
+        return name;
+    }
+
+
+    ///** */
+    //auto find( string key )
+    //{
+    //    import std.algorithm : find;
+
+    //    return childs().find!( ( a ) => ( a.baseName == key ) )();
+    //}
+
+
+    /** */
     void readAttributes()
     {
         if ( isRootPath( name ) )
@@ -161,13 +177,39 @@ public:
 
 
     /** */
+    auto opSlice( size_t a, size_t b )
+    {
+        import std.array : array;
+        import std.range : drop;
+        import std.range : take;
+
+        return 
+            childs( [ Sorting.DIR, Sorting.NAME ] )
+                .drop( a )
+                .take( b )
+                .array;
+    }
+
+
+    /** */
+    auto opSlice()
+    {
+        import std.array : array;
+        
+        return 
+            childs( [ Sorting.DIR, Sorting.NAME ] )
+            .array;
+    }
+
+
+    /** */
     auto childs()
     {
         return DirIterator( name );
     }
 
 
-    /** childs( [ Sorting.BY_DIR, Sorting.BY_NAME ] ) */
+    /** childs( [ Sorting.DIR, Sorting.NAME ] ) */
     auto childs( Sorting[] sorting )
     {
         //bool delegate( DirEntry a, DirEntry b ) sortFunc;
