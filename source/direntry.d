@@ -176,30 +176,30 @@ public:
     }
 
 
-    /** */
-    auto opSlice( size_t a, size_t b )
-    {
-        import std.array : array;
-        import std.range : drop;
-        import std.range : take;
+    ///** */
+    //auto opSlice( size_t a, size_t b )
+    //{
+    //    import std.array : array;
+    //    import std.range : drop;
+    //    import std.range : take;
 
-        return 
-            childs( [ Sorting.DIR, Sorting.NAME ] )
-                .drop( a )
-                .take( b )
-                .array;
-    }
+    //    return 
+    //        opSlice()
+    //            .drop( a )
+    //            .take( b - a )
+    //            .array;
+    //}
 
 
-    /** */
-    auto opSlice()
-    {
-        import std.array : array;
-        
-        return 
-            childs( [ Sorting.DIR, Sorting.NAME ] )
-            .array;
-    }
+    ///** */
+    //auto opSlice()
+    //{
+    //    import std.array : array;
+
+    //    return 
+    //        childs( [ Sorting.DIR, Sorting.NAME ] )
+    //        .array;
+    //}
 
 
     /** */
@@ -212,18 +212,20 @@ public:
     /** childs( [ Sorting.DIR, Sorting.NAME ] ) */
     auto childs( Sorting[] sorting )
     {
+        import std.uni : toLower;
+
         //bool delegate( DirEntry a, DirEntry b ) sortFunc;
 
         return
             childs
-            .array
-            .sort!( 
-                ( a, b ) => ( 
-                    ( a.isDir && b.isFile ) ||
-                    ( a.isDir && b.isDir && a.name < b.name ) ||
-                    ( a.isFile && b.isFile && a.name < b.name )
-                ) 
-            );
+                .array
+                .sort!( 
+                    ( a, b ) => ( 
+                        ( a.isDir && b.isFile ) ||
+                        ( a.isDir && b.isDir && a.name.toLower < b.name.toLower ) ||
+                        ( a.isFile && b.isFile && a.name.toLower < b.name.toLower )
+                    ) 
+                );
     }
 
 
